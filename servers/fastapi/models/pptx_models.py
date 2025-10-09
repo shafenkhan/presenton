@@ -143,6 +143,7 @@ class PptxPictureBoxModel(PptxShapeModel):
     shape: Optional[PptxBoxShapeEnum] = None
     object_fit: Optional[PptxObjectFitModel] = None
     picture: PptxPictureModel
+    clip_path: Optional[str] = None
 
 
 class PptxConnectorModel(PptxShapeModel):

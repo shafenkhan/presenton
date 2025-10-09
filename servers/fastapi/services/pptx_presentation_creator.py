@@ -37,6 +37,7 @@ from models.pptx_models import (
 from utils.download_helpers import download_files
 from utils.image_utils import (
     clip_image,
+    clip_image_with_path,
     create_circle_image,
     fit_image,
     invert_image,
@@ -184,6 +185,7 @@ class PptxPresentationCreator:
             or picture_model.opacity
             or picture_model.object_fit
             or picture_model.shape
+            or picture_model.clip_path
         ):
             try:
                 image = Image.open(image_path)
@@ -201,6 +203,13 @@ class PptxPresentationCreator:
                     picture_model.position.width,
                     picture_model.position.height,
                     picture_model.object_fit,
+                )
+            if picture_model.clip_path:
+                image = clip_image_with_path(
+                    image,
+                    picture_model.position.width,
+                    picture_model.position.height,
+                    picture_model.clip_path,
                 )
             elif picture_model.clip:
                 image = clip_image(

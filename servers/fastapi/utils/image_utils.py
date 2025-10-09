@@ -46,6 +46,79 @@ def clip_image(
     return clipped_image
 
 
+def clip_image_with_path(
+    image: Image.Image,
+    width: int,
+    height: int,
+    clip_path: str,
+) -> Image.Image:
+    # Normalize image to target box first (like CSS background-size: cover)
+    # so polygon percentages map to the box the picture occupies.
+    try:
+        base = clip_image(image, width, height)
+    except Exception:
+        base = image.resize((width, height), Image.LANCZOS)
+
+    if base.mode != "RGBA":
+        base = base.convert("RGBA")
+
+    # Parse polygon points from CSS-like clip-path string
+    def _parse_value(value: str, max_size: int) -> float:
+        v = value.strip().lower()
+        try:
+            if v.endswith("%"):
+                return max(0.0, min(max_size, (float(v[:-1]) / 100.0) * max_size))
+            if v.endswith("px"):
+                return max(0.0, min(max_size, float(v[:-2])))
+            # unitless treated as px
+            return max(0.0, min(max_size, float(v)))
+        except Exception:
+            return 0.0
+
+    def _parse_polygon(poly: str, w: int, h: int):
+        s = poly.strip()
+        s_lower = s.lower()
+        if not s_lower.startswith("polygon(") or not s_lower.endswith(")"):
+            return []
+        inner = s[s.find("(") + 1 : s.rfind(")")].strip()
+        # Optional fill-rule at start (nonzero|evenodd), skip if present
+        if inner.lower().startswith("nonzero,"):
+            inner = inner[len("nonzero,") :].strip()
+        elif inner.lower().startswith("evenodd,"):
+            inner = inner[len("evenodd,") :].strip()
+
+        # Split points by comma; each point has two coords separated by whitespace
+        raw_points = [p.strip() for p in inner.split(",") if p.strip()]
+        points = []
+        for p in raw_points:
+            parts = [c for c in p.replace(",", " ").split() if c]
+            if len(parts) < 2:
+                continue
+            x = _parse_value(parts[0], w)
+            y = _parse_value(parts[1], h)
+            points.append((int(round(x)), int(round(y))))
+        return points
+
+    w, h = base.size
+    points = _parse_polygon(clip_path, w, h)
+    if len(points) < 3:
+        return base
+
+    # Build an anti-aliased mask by supersampling
+    scale = 4
+    mask_w, mask_h = w * scale, h * scale
+    mask = Image.new("L", (mask_w, mask_h), 0)
+    draw = ImageDraw.Draw(mask)
+    scaled_points = [(x * scale, y * scale) for (x, y) in points]
+    draw.polygon(scaled_points, fill=255)
+    aa_mask = mask.resize((w, h), Image.LANCZOS)
+
+    # Apply the mask to the base image
+    result = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    result.paste(base, (0, 0), aa_mask)
+    return result
+
+
 def round_image_corners(image: Image.Image, radii: List[int]) -> Image.Image:
     if len(radii) != 4:
         raise ValueError(
